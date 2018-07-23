@@ -1,0 +1,27 @@
+{
+  "name": "botscheduler",
+  "version": "1.0.0",
+  "description": "creating a slackbot that makes event on google calendar",
+  "main": "index.js",
+  "scripts": {
+    "babel": "mkdir -p build && babel server.js -o build/main.bundle.js",
+    "lint": "eslint --fix *.js",
+    "start": "babel-node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jypark97/botScheduler.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jypark97/botScheduler/issues"
+  },
+  "homepage": "https://github.com/jypark97/botScheduler#readme",
+  "devDependencies": {
+    "babel-cli": "^6.26.0",
+    "babel-preset-env": "^1.7.0",
+    "eslint": "^5.2.0"
+  },
+  "presets": [["env", {"targets": {"node": "current"}}]]
+}
