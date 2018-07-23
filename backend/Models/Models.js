@@ -2,6 +2,7 @@ var mongoose = require('mongoose');
 var Schema = mongoose.Schema;
 
 //Put schemas here
+//Updates have been made
 
 var taskSchema = new Schema({
 
@@ -15,7 +16,7 @@ var userSchema = new Schema({
   googleCalenderAccount: {
     accessToken: ,
     refreshToken: ,
-    googlePlusprofile: 
+    googlePlusprofile:
   }
   meetingLength: 30,
   slackId: String,
