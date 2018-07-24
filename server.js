@@ -7,7 +7,7 @@ const readline = require('readline');
 const {google} = require('googleapis');
 const app = express();
 var mongoose = require('mongoose');
-const Models = require('../backend/Models/Models.js');
+const Models = require('./backend/Models/Models.js');
 const User = Models.User
 app.use(bodyParser.urlencoded({extended: false}))
 app.use(bodyParser.json())
@@ -103,6 +103,7 @@ app.get('/oauth/callback', function(req, res){
     .catch((err) => {
       console.log('error in newuser save of connectcallback');
       res.status(400).json({error:err});
+    })
   })
 })
 

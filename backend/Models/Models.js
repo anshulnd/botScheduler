@@ -13,11 +13,9 @@ var meetingSchema = new Schema({
 
 var userSchema = new Schema({
   googleCalenderAccount: {
-    accessToken: ,
-    refreshToken: ,
-    googlePlusprofile:
-  }
-  meetingLength: 30,
+    accessToken:'',
+    refreshToken:'',
+  },
   slackId: String,
   slackUser: String,
   slackEmail: String,
