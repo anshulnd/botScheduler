@@ -6,12 +6,104 @@ const fs = require('fs');
 const readline = require('readline');
 const {google} = require('googleapis');
 const app = express();
+var mongoose = require('mongoose');
+const Models = require('../backend/Models/Models.js');
+const User = Models.User
 app.use(bodyParser.urlencoded({extended: false}))
 app.use(bodyParser.json())
+
+mongoose.connect(process.env.MONGODB_URI);
 
 app.post('/slack', (req, res) => {
   console.log(req.body);
   res.end()
+})
+
+const oauth2Client = new google.auth.OAuth2(
+  process.env.CLIENT_ID_CAL,
+  process.env.CLIENT_SECRET_CAL,
+  process.env.REDIRECT_URL
+)
+
+function makeCalendarAPICall(token) {
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.CLIENT_ID,
+    process.env.CLIENT_SECRET,
+    process.env.REDIRECT_URL
+  )
+
+  oauth2Client.setCredentials(token)
+
+  oauth2Client.on('tokens', (tokens) => {
+    if (tokens.refresh_token) {
+      // store the refresh_token in my database!
+      console.log(tokens.refresh_token);
+    }
+    console.log(tokens.access_token);
+  });
+
+  const calendar = google.calendar({version: 'v3', auth: oauth2Client});
+/*
+  calendar.events.insert({
+    calendarId: 'primary', // Go to setting on your calendar to get Id
+    'resource': {
+      'summary': 'Google I/O 2015',
+      'location': '800 Howard St., San Francisco, CA 94103',
+      'description': 'A chance to hear more about Google\'s developer products.',
+      'start': {
+        'dateTime': '2018-07-04T02:00:35.462Z',
+        'timeZone': 'America/Los_Angeles'
+      },
+      'end': {
+        'dateTime': '2018-07-04T02:10:35.462Z',
+        'timeZone': 'America/Los_Angeles'
+      },
+      'attendees': [
+        {'email': 'lpage@example.com'},
+        {'email': 'sbrin@example.com'}
+      ]
+    }
+  }, (err, {data}) => {
+    if (err) return console.log('The API returned an error: ' + err);
+    console.log(data)
+  })
+  return;
+*/
+
+  calendar.events.list({
+    calendarId: 'primary', // Go to setting on your calendar to get Id
+    timeMin: (new Date()).toISOString(),
+    maxResults: 10,
+    singleEvents: true,
+    orderBy: 'startTime',
+  }, (err, {data}) => {
+    if (err) return console.log('The API returned an error: ' + err);
+    const events = data.items;
+    if (events.length) {
+      console.log('Upcoming 10 events:');
+      events.map((event, i) => {
+        const start = event.start.dateTime || event.start.date;
+        console.log(`${start} - ${event.summary}`);
+      });
+    } else {
+      console.log('No upcoming events found.');
+    }
+  });
+}
+
+app.get('/oauth/callback', function(req, res){
+  oauth2Client.getToken(req.query.code, function (err, token) {
+    if (err) return console.error(err.message)
+    var newUser = new User({
+      googleCalenderAccount: token,
+      slackId: req.query.state
+    })
+    newUser.save()
+    .then( () => res.status(200).send("Your account was successfuly authenticated"))
+    .catch((err) => {
+      console.log('error in newuser save of connectcallback');
+      res.status(400).json({error:err});
+  })
 })
 
 // Get an API token by creating an app at <https://api.slack.com/apps?new_app=1>
@@ -25,19 +117,37 @@ const web = new WebClient(slack_token);
 rtm.start();
 
 rtm.on('channel_joined', (event) => {
+  const url = oauth2Client.generateAuthUrl({
+    access_type: 'offline',
+    state: event.user,
+    scope: [
+      'https://www.googleapis.com/auth/calendar'
+    ]
+  })
+
   web.chat.postMessage({
     "text": `Hello! I am ScheduBot, your friendly neighborhood scheduling assistant.
     I can create reminders and schedule events for you! To do my job really well,
     I need permission to access your calendar (but don't worry, I won't share
     anything with anyone).`,
-    "channel": event.channel
+    "channel": event.channel,
+    "attachments": [
+      {
+        "fallback": "Authorize ScheduBot to use Google Calendar.",
+        "actions": [
+          {
+            "type": 'button',
+            "text": "Authorize ScheduBot",
+            "url": url
+          }
+        ]
+      }
+    ]
   })
 })
 
 // Log all incoming messages
 rtm.on('message', (event) => {
-  console.log(event);
-
   if (event.bot_id !== "BBWTAJR70"){
     const projectId = process.env.DIALOG_FLOW_ID;
     const sessionId = event.user;
@@ -128,26 +238,7 @@ rtm.on('message', (event) => {
 //     ]
 // })
 //   }
-  })
-console.log('running running running')
-app.listen(3000)
+})
 
-// Log all reactions
-// rtm.on('reaction_added', (event) => {
-//   // Structure of `event`: <https://api.slack.com/events/reaction_added>
-//   console.log(`Reaction from ${event.user}: ${event.reaction}`);
-// });
-// rtm.on('reaction_removed', (event) => {
-//   // Structure of `event`: <https://api.slack.com/events/reaction_removed>
-//   console.log(`Reaction removed by ${event.user}: ${event.reaction}`);
-// });
-//
-// // Send a message once the connection is ready
-// rtm.on('ready', (event) => {
-//   console.log("event", event)
-//   // Getting a conversation ID is left as an exercise for the reader. It's usually available as the `channel` property
-//   // on incoming messages, or in responses to Web API requests.
-//   //
-//   const conversationId = 'DBUN89ARE';
-//    rtm.sendMessage('I AM CONNECTED', conversationId);
-// });
+console.log('running running running');
+app.listen(3000);
