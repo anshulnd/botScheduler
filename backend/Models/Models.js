@@ -2,14 +2,6 @@ var mongoose = require('mongoose');
 var Schema = mongoose.Schema;
 
 //Put schemas here
-<<<<<<< HEAD
-var meetingSchema = new Schema({
-  
-})
-
-=======
-//Updates have been made
->>>>>>> 1537962b5324bb851354301284410577b0cdd976
 
 var taskSchema = new Schema({
 

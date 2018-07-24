@@ -1,6 +1,7 @@
 const { RTMClient, WebClient } = require('@slack/client');
 const express = require('express');
 const bodyParser = require('body-parser');
+const dialogflow = require('dialogflow');
 const app = express();
 app.use(bodyParser.urlencoded({extended: false}))
 app.use(bodyParser.json())
@@ -25,50 +26,75 @@ rtm.start();
 rtm.on('message', (event) => {
   console.log(event);
   // Structure of `event`: <https://api.slack.com/events/message>
-  console.log(`Message from ${event.user}: ${event.text}`);
-  console.log('I am less worthless by at least accomplishing this');
-  if (event.bot_id !== "BBUSG64KA") {
-    web.chat.postMessage({
-    "text": "Would you like to play a game?",
-    "channel": event.channel,
-    "attachments": [
-        {
-            "text": "Choose a game to play",
-            "fallback": "You are unable to choose a game",
-            "callback_id": "wopr_game",
-            "color": "#3AA3E3",
-            "attachment_type": "default",
-            "actions": [
-                {
-                    "name": "game",
-                    "text": "Chess",
-                    "type": "button",
-                    "value": "chess"
-                },
-                {
-                    "name": "game",
-                    "text": "Falken's Maze",
-                    "type": "button",
-                    "value": "maze"
-                },
-                {
-                    "name": "game",
-                    "text": "Thermonuclear War",
-                    "style": "danger",
-                    "type": "button",
-                    "value": "war",
-                    "confirm": {
-                        "title": "Are you sure?",
-                        "text": "Wouldn't you prefer a good game of chess?",
-                        "ok_text": "Yes",
-                        "dismiss_text": "No"
-                    }
-                }
-            ]
+  //BBUSG64KA => ScheduBot bot_id
+
+  const projectId = 'schedulerbot-9b789';
+  const sessionId = event.user;
+  const query = event.text;
+  const languageCode = 'en-US';
+  const sessionClient = new dialogflow.SessionsClient();
+
+  const sessionPath = sessionClient.sessionPath(projectId, sessionId);
+  const request = {
+    session: sessionPath,
+    queryInput: {
+      text: {
+        text: query,
+        languageCode: languageCode,
+      },
+    },
+  };
+
+  sessionClient.detectIntent(request)
+    .then(responses => {
+      console.log('Detected intent');
+      const result = responses[0].queryResult;
+      console.log(`  Query: ${result.queryText}`);
+      console.log(`  Response: ${result.fulfillmentText}`);
+      if (result.intent) {
+        console.log(`  Intent: ${result.intent.displayName}`);
+        if (event.bot_id !== "BBWTAJR70") {
+          web.chat.postMessage({
+          "text": result.fulfillmentText
+      })
         }
-    ]
-})
-  }
+      } else {
+        console.log(`  No intent matched.`);
+      }
+    })
+    .catch(err => {
+      console.error('ERROR:', err);
+    });
+
+//   if (event.bot_id !== "BBWTAJR70") {
+//     web.chat.postMessage({
+//     "text": "Would you like set this reminder?",
+//     "channel": event.channel,
+//     "attachments": [
+//         {
+//             "text": "Choose a game to play",
+//             "fallback": "You are unable to choose a game",
+//             "callback_id": "wopr_game",
+//             "color": "#3AA3E3",
+//             "attachment_type": "default",
+//             "actions": [
+//                 {
+//                     "name": "Confirm"
+//                     "text": "Confirm",
+//                     "type": "button",
+//                     "value": "Confirm"
+//                 },
+//                 {
+//                     "name": "Cancel",
+//                     "text": "Cancel",
+//                     "type": "button",
+//                     "value": "Cancel"
+//                 },
+//             ]
+//         }
+//     ]
+// })
+//   }
 })
 
 app.listen(3000)
