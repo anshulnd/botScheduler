@@ -61,6 +61,7 @@ rtm.on('message', (event) => {
         const result = responses[0].queryResult;
         console.log(`  Query: ${result.queryText}`);
         console.log(`  Response: ${result.fulfillmentText}`);
+        console.log(`  Intent: ${result.intent.displayName}`);
         if (event.bot_id !== "BBWTAJR70") {
           web.chat.postMessage({
             "channel": event.channel,
