@@ -2,8 +2,6 @@ const { RTMClient, WebClient } = require('@slack/client');
 const express = require('express');
 const bodyParser = require('body-parser');
 const dialogflow = require('dialogflow');
-const fs = require('fs');
-const readline = require('readline');
 const {google} = require('googleapis');
 const app = express();
 var mongoose = require('mongoose');
@@ -43,7 +41,6 @@ function makeCalendarAPICall(token) {
   });
 
   const calendar = google.calendar({version: 'v3', auth: oauth2Client});
-/*
   calendar.events.insert({
     calendarId: 'primary', // Go to setting on your calendar to get Id
     'resource': {
@@ -68,30 +65,9 @@ function makeCalendarAPICall(token) {
     console.log(data)
   })
   return;
-*/
-
-  calendar.events.list({
-    calendarId: 'primary', // Go to setting on your calendar to get Id
-    timeMin: (new Date()).toISOString(),
-    maxResults: 10,
-    singleEvents: true,
-    orderBy: 'startTime',
-  }, (err, {data}) => {
-    if (err) return console.log('The API returned an error: ' + err);
-    const events = data.items;
-    if (events.length) {
-      console.log('Upcoming 10 events:');
-      events.map((event, i) => {
-        const start = event.start.dateTime || event.start.date;
-        console.log(`${start} - ${event.summary}`);
-      });
-    } else {
-      console.log('No upcoming events found.');
-    }
-  });
 }
 
-app.get('/oauth/callback', function(req, res){
+app.get('/oauthcallback', function(req, res){
   oauth2Client.getToken(req.query.code, function (err, token) {
     if (err) return console.error(err.message)
     var newUser = new User({
@@ -117,96 +93,97 @@ const web = new WebClient(slack_token);
 // Start the connection to the platform
 rtm.start();
 
-rtm.on('channel_joined', (event) => {
-  const url = oauth2Client.generateAuthUrl({
-    access_type: 'offline',
-    state: event.user,
-    scope: [
-      'https://www.googleapis.com/auth/calendar'
-    ]
-  })
-
-  web.chat.postMessage({
-    "text": `Hello! I am ScheduBot, your friendly neighborhood scheduling assistant.
-    I can create reminders and schedule events for you! To do my job really well,
-    I need permission to access your calendar (but don't worry, I won't share
-    anything with anyone).`,
-    "channel": event.channel,
-    "attachments": [
-      {
-        "fallback": "Authorize ScheduBot to use Google Calendar.",
-        "actions": [
-          {
-            "type": 'button',
-            "text": "Authorize ScheduBot",
-            "url": url
-          }
-        ]
-      }
-    ]
-  })
-})
-
 // Log all incoming messages
 rtm.on('message', (event) => {
-  if (event.bot_id !== "BBWTAJR70"){
-    const projectId = process.env.DIALOG_FLOW_ID;
-    const sessionId = event.user;
-    const query = event.text;
-    const languageCode = 'en-US';
-    const sessionClient = new dialogflow.SessionsClient();
-
-    const sessionPath = sessionClient.sessionPath(projectId, sessionId);
-    const request = {
-      session: sessionPath,
-      queryInput: {
-        text: {
-          text: query,
-          languageCode: languageCode,
-        },
-      },
-    };
-    sessionClient.detectIntent(request)
-      .then(responses => {
-        console.log('Detected intent');
-        const result = responses[0].queryResult;
-        console.log(`  Query: ${result.queryText}`);
-        console.log(`  Response: ${result.fulfillmentText}`);
-        console.log(`  Intent: ${result.intent.displayName}`);
-        if (event.bot_id !== "BBWTAJR70") {
-          web.chat.postMessage({
-            "channel": event.channel,
-            "text": result.fulfillmentText,
-            "attachments": [
-                              {
-                                  "text": "Confirm task",
-                                  "fallback": "You are unable to confirm",
-                                  "callback_id": "confirm_reminder",
-                                  "color": "#3AA3E3",
-                                  "attachment_type": "default",
-                                  "actions": [
-                                      {
-                                          "name": "confirmation",
-                                          "text": "Yes",
-                                          "type": "button",
-                                          "value": "yes"
-                                      },
-                                      {
-                                          "name": "confirmation",
-                                          "text": "No",
-                                          "type": "button",
-                                          "value": "no"
-                                      }
-                                  ]
-                              }
-                          ]
-          })
-        }
+  if (event.bot_id) return
+  User.findOne({'slackId': event.user}).then((res) => {
+    if(!res){
+      const url = oauth2Client.generateAuthUrl({
+        access_type: 'offline',
+        state: event.user,
+        scope: [
+          'https://www.googleapis.com/auth/calendar'
+        ]
       })
-      .catch(err => {
-        console.error('ERROR:', err);
-    });
-  }
+      web.chat.postMessage({
+        "text": `Hello! I am ScheduBot, your friendly neighborhood scheduling assistant.
+        I can create reminders and schedule events for you! To do my job really well,
+        I need permission to access your calendar (but don't worry, I won't share
+        anything with anyone).`,
+        "channel": event.channel,
+        "attachments": [
+          {
+            "fallback": "Authorize ScheduBot to use Google Calendar.",
+            "actions": [
+              {
+                "type": 'button',
+                "text": "Authorize ScheduBot",
+                "url": url
+              }
+            ]
+          }
+        ]
+      })
+    }else{
+        const projectId = process.env.DIALOG_FLOW_ID;
+        const sessionId = event.user;
+        const query = event.text;
+        const languageCode = 'en-US';
+        const sessionClient = new dialogflow.SessionsClient();
+
+        const sessionPath = sessionClient.sessionPath(projectId, sessionId);
+        const request = {
+          session: sessionPath,
+          queryInput: {
+            text: {
+              text: query,
+              languageCode: languageCode,
+            },
+          },
+        };
+        sessionClient.detectIntent(request)
+          .then(responses => {
+            console.log('Detected intent');
+            const result = responses[0].queryResult;
+            console.log(result)
+            if (!event.bot_id) {
+              web.chat.postMessage({
+                "channel": event.channel,
+                "text": result.fulfillmentText,
+                "attachments": [
+                                  {
+                                      "text": "Confirm task",
+                                      "fallback": "You are unable to confirm",
+                                      "callback_id": "confirm_reminder",
+                                      "color": "#3AA3E3",
+                                      "attachment_type": "default",
+                                      "actions": [
+                                          {
+                                              "name": "confirmation",
+                                              "text": "Yes",
+                                              "type": "button",
+                                              "value": "yes"
+                                          },
+                                          {
+                                              "name": "confirmation",
+                                              "text": "No",
+                                              "type": "button",
+                                              "value": "no"
+                                          }
+                                      ]
+                                  }
+                              ]
+              })
+            }
+          })
+          .catch(err => {
+            console.error('ERROR:', err);
+        });
+
+    }
+    }
+  )
+
   // Structure of `event`: <https://api.slack.com/events/message>
   //BBUSG64KA => ScheduBot bot_id
 

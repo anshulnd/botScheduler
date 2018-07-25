@@ -3,10 +3,7 @@ var Schema = mongoose.Schema;
 
 //Put schemas here
 var userSchema = new Schema({
-  googleCalenderAccount: {
-    accessToken:'',
-    refreshToken:'',
-  },
+  googleCalenderAccount: {},
   slackId: String,
   slackUser: String,
   slackEmail: String,
