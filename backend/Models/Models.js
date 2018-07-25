@@ -22,38 +22,22 @@ var taskSchema = new Schema({
     type: String,
     required: true
   },
-  day: {
+  time: {
     type: String,
     required: true
   },
-  googleCalendarEventId: {
-    type: String
-  },
   requesterId: {
     type: String
   },
-  status: {
-    type: String
-  },
-  createdAt: {
-    type: String
-  },
-  requesterId: {
-    type: String
-  }
 })
 
 var meetingSchema = new Schema({
-  day: {
-    type: String,
-    required: true
-  },
   time: {
     type: String,
     required: true
   },
   invitees: {
-    type: String,
+    type: Array,
     required: true
   },
   subject: {
@@ -64,7 +48,10 @@ var meetingSchema = new Schema({
   },
   meetingLength: {
     type: String
-  }
+  },
+  requesterId: {
+    type: String
+  },
 })
 
 
