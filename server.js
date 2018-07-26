@@ -5,33 +5,40 @@ const dialogflow = require('dialogflow');
 const {google} = require('googleapis');
 const app = express();
 var mongoose = require('mongoose');
-const Models = require('./backend/Models/Models.js');
-const User = Models.User
-const Task = Models.Task
-const Meeting = Models.Meeting
-app.use(bodyParser.urlencoded({extended: false}))
-app.use(bodyParser.json())
+const { User, Task, Meeting } = require('./backend/Models/Models.js');
+const {makeCalendarMeeting, makeCalendarReminder} = require('./calendarFunc.js');
+app.use(bodyParser.urlencoded({extended: false}));
+app.use(bodyParser.json());
 
 mongoose.connect(process.env.MONGODB_URI);
-// let users = [];
-// app.get('https://slack.com/api/users.list?token='+process.env.SLACK_TOKEN, (req, res){
-//   res.members.forEach(user => {
-//     users.push(user.profile.display_name)
-//   })
-// })
+
+let users = [];
+
+app.get('https://slack.com/api/users.list?token=' + process.env.SLACK_TOKEN, (req, res) => {
+  res.members.forEach(function(user){
+    let name = user.profile.display_name;
+    let obj = {name: user.profile.email}
+    users.push(obj);
+  })
+})
+console.log(users);
 
 app.post('/slack', (req, res) => {
   let payload = JSON.parse(req.body.payload);
+  console.log(payload)
   let slackId = payload.user.id
   let subject = payload.subject
-  let channel = payload.channel
-  if(payload.text === "No one will love you if you can't remember simple stuff like that"){
+  let channel = payload.channel.id
+  if(payload.original_message.text === "No one will love you if you can't remember simple stuff like that"){
     User.findOne({slackId: slackId})
     .then((user) => {
       makeCalendarReminder(user.googleCalenderAccount, slackId, subject, channel)
     })
   }else{
-
+    User.findOne({slackId: slackId})
+    .then((user) => {
+      makeCalendarMeeting(user.googleCalenderAccount, slackId, subject, channel, users);
+    })
   }
   res.end()
 })
@@ -41,50 +48,6 @@ const oauth2Client = new google.auth.OAuth2(
   process.env.CLIENT_SECRET_CAL,
   process.env.REDIRECT_URL
 )
-
-function makeCalendarReminder(token, slackId, subject, channel) {
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.CLIENT_ID,
-    process.env.CLIENT_SECRET,
-    process.env.REDIRECT_URL
-  )
-
-  oauth2Client.setCredentials(token)
-  oauth2Client.refreshAccessToken((err, token) => {
-    User.findOneAndUpdate({slackId: slackId}, {googleCalenderAccount: token})
-    oauth2Client.setCredentials(token)
-  })
-
-  const calendar = google.calendar({version: 'v3', auth: oauth2Client});
-  Task.findOne({requesterId: slackId, subject: subject})
-  .then((task) => {
-    console.log(task.time, task)
-    let date = task.time.slice(0, 10)
-    calendar.events.insert({
-      calendarId: 'primary', // Go to setting on your calendar to get Id
-      'resource': {
-        'summary': task.subject,
-        'location': '415 9th St., San Francisco, CA 94103',
-        'description': task.subject,
-        'start': {
-          'date': date,
-          // 'timeZone': 'America/Los_Angeles'
-        },
-        'end': {
-          'date': date,
-          // 'timeZone': 'America/Los_Angeles'
-        }
-      }
-    }, (err, data) => {
-      if (err) return console.log('The API returned an error: ' + err);
-      console.log(data)
-    })
-    web.chat.postMessage({
-      "channel": event.channel,
-      "text": "Congatulations! Your reminder has been set.",
-    });
-  })
-}
 
 app.get('/oauthcallback', function(req, res){
   oauth2Client.getToken(req.query.code, function (err, token) {
@@ -116,14 +79,14 @@ rtm.start();
 // Log all incoming messages
 rtm.on('message', (event) => {
   if (event.bot_id) return
-  User.findOne({'slackId': event.user}).then((res) => {
+  User.findOne({'slackId': event.user})
+  .then((res) => {
     if(!res){
       const url = oauth2Client.generateAuthUrl({
         access_type: 'offline',
         state: event.user,
         scope: [
-          'https://www.googleapis.com/auth/calendar',
-          'https://www.googleapis.com/auth/userinfo.email'
+          'https://www.googleapis.com/auth/calendar'
         ]
       })
       web.chat.postMessage({
@@ -166,7 +129,6 @@ rtm.on('message', (event) => {
           .then(responses => {
             const result = responses[0].queryResult;
             const params = result.parameters.fields;
-            if (!event.bot_id) {
               let confirmation;
               if (result.task !== "" && result.fulfillmentText === "No one will love you if you can't remember simple stuff like that") { //Intent indicates a reminder
                 var reminder = new Task({
@@ -174,6 +136,7 @@ rtm.on('message', (event) => {
                   subject: params.Task.stringValue,
                   requesterId: event.user
                 })
+                subject = params.Task.stringValue;
                 reminder.save()
                 .then(()=>{
                   confirmation = {
@@ -207,11 +170,12 @@ rtm.on('message', (event) => {
                 }).catch((err) => console.log(err))
               } else if (result.meeting !== "" && result.fulfillmentText === "Aight fucker. Catch me outside") { //Intent indicates a meeting
                 var meeting = new Meeting({
-                  time: params.date || params.time,
+                  time: params.date.stringValue || params.time.stringValue,
                   invitees: params.name,
-                  subject: params.Task,
+                  subject: params.Task.stringValue,
                   requesterId: event.user
                 })
+                subject = params.Task.stringValue;
                 confirmation = {
                   "channel": event.channel,
                   "text": result.fulfillmentText,
@@ -246,55 +210,19 @@ rtm.on('message', (event) => {
                   "text": result.fulfillmentText,
                   "attachments": [
                                     {
-                                        "text": `Please request either a reminder
-                                        or for an event to be scheduled.`
+                                        "text": `Please request either a reminder or for an event to be scheduled.`
                                     }
                                 ]
                 }
                 web.chat.postMessage(confirmation).catch(err => console.log(err))
               }
-            }
           })
           .catch(err => {
             console.error('ERROR:', err);
         });
-
     }
     }
   )
-
-  // Structure of `event`: <https://api.slack.com/events/message>
-  //BBUSG64KA => ScheduBot bot_id
-
-//   if (event.bot_id !== "BBWTAJR70") {
-//     web.chat.postMessage({
-//     "text": "Would you like set this reminder?",
-//     "channel": event.channel,
-//     "attachments": [
-//         {
-//             "text": "Choose a game to play",
-//             "fallback": "You are unable to choose a game",
-//             "callback_id": "wopr_game",
-//             "color": "#3AA3E3",
-//             "attachment_type": "default",
-//             "actions": [
-//                 {
-//                     "name": "Confirm"
-//                     "text": "Confirm",
-//                     "type": "button",
-//                     "value": "Confirm"
-//                 },
-//                 {
-//                     "name": "Cancel",
-//                     "text": "Cancel",
-//                     "type": "button",
-//                     "value": "Cancel"
-//                 },
-//             ]
-//         }
-//     ]
-// })
-//   }
 })
 
 console.log('running running running');
