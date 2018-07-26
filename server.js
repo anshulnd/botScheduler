@@ -17,7 +17,6 @@ let users = [];
 
 fetch(`https://slack.com/api/users.list?token=${process.env.TEAM_TOKEN}&pretty=1`)
 .then((res) =>{
-  console.log(res)
   res.members.forEach(function(user){
     let name = user.profile.display_name;
     let obj = {name: user.profile.email}

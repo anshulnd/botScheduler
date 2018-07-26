@@ -11,6 +11,11 @@ app.use(bodyParser.json());
 
 mongoose.connect(process.env.MONGODB_URI);
 
+const slack_token = process.env.SLACK_TOKEN || '';
+
+const rtm = new RTMClient(slack_token);
+const web = new WebClient(slack_token);
+
 function makeCalendarMeeting(token, slackId, subject, channel, users) {
   const oauth2Client = new google.auth.OAuth2(
     process.env.CLIENT_ID,
@@ -35,29 +40,52 @@ function makeCalendarMeeting(token, slackId, subject, channel, users) {
     })
     let start = new Date(meeting.time);
     let end = new Date(start.getTime() + 1800000)
-    calendar.events.insert({
-      calendarId: 'primary', // Go to setting on your calendar to get Id
-      'resource': {
-        'summary': meeting.subject,
-        'location': '415 9th St., San Francisco, CA 94103',
-        'description': meeting.subject,
-        'start': {
-          'dateTime': start.toISOString(),
-          'timeZone': 'America/Los_Angeles'
-        },
-        'end': {
-          'dateTime': end.toISOString(),
-          'timeZone': 'America/Los_Angeles'
-        },
-        'attendees': emails,
-      },
-      'sendNotifications': true
-    }, (err, data) => {
-      if (err) return console.log('The API returned an error: ' + err);
-      web.chat.postMessage({
-        "channel": event.channel,
-        "text": "Congatulations! Your reminder has been set.",
-      });
+    calendar.freebusy.query({
+      auth: oauth2Client,
+      resource: {
+        "timeMin": start.toISOString(),
+        "timeMax": end.toISOString(),
+        "items": [{"id": "primary"}]
+      }
+    }).then((res) => {
+      let schedules = Object.keys(res.calendars)
+      let busy = [];
+      schedules.forEach((key)=>{
+        if (res.calendars.key.length()){
+          busy.push(res.calendars.key.length())
+        }
+      })
+      if(!busy.length()){
+        calendar.events.insert({
+          calendarId: 'primary', // Go to setting on your calendar to get Id
+          'resource': {
+            'summary': meeting.subject,
+            'location': '415 9th St., San Francisco, CA 94103',
+            'description': meeting.subject,
+            'start': {
+              'dateTime': start.toISOString(),
+              'timeZone': 'America/Los_Angeles'
+            },
+            'end': {
+              'dateTime': end.toISOString(),
+              'timeZone': 'America/Los_Angeles'
+            },
+            'attendees': emails,
+          },
+          'sendNotifications': true
+        }, (err, data) => {
+          if (err) return console.log('The API returned an error: ' + err);
+          web.chat.postMessage({
+            "channel": event.channel,
+            "text": "Congatulations! Your reminder has been set.",
+          });
+        })
+      }else{
+        web.chat.postMessage({
+          "channel": event.channel,
+          "text": "Sorry, some of us are busy that time. Please set a new time for the meeting.",
+        });
+      }
     })
   }).catch(err => console.log(err))
 }
