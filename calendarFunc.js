@@ -50,7 +50,8 @@ function makeCalendarMeeting(token, slackId, subject, channel, users) {
           'timeZone': 'America/Los_Angeles'
         },
         'attendees': emails,
-      }
+      },
+      'sendNotifications': true
     }, (err, data) => {
       if (err) return console.log('The API returned an error: ' + err);
       web.chat.postMessage({

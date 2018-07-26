@@ -3,6 +3,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const dialogflow = require('dialogflow');
 const {google} = require('googleapis');
+const fetch = require('node-fetch')
 const app = express();
 var mongoose = require('mongoose');
 const { User, Task, Meeting } = require('./backend/Models/Models.js');
@@ -14,22 +15,24 @@ mongoose.connect(process.env.MONGODB_URI);
 
 let users = [];
 
-app.get('https://slack.com/api/users.list?token=' + process.env.SLACK_TOKEN, (req, res) => {
+fetch(`https://slack.com/api/users.list?token=${process.env.TEAM_TOKEN}&pretty=1`)
+.then((res) =>{
+  console.log(res)
   res.members.forEach(function(user){
     let name = user.profile.display_name;
     let obj = {name: user.profile.email}
     users.push(obj);
   })
-})
-console.log(users);
+}).catch((err) => console.log(err))
 
 app.post('/slack', (req, res) => {
   let payload = JSON.parse(req.body.payload);
   console.log(payload)
   let slackId = payload.user.id
-  let subject = payload.subject
+  let value = JSON.parse(payload.actions[0].value)
+  let subject = value.subject
   let channel = payload.channel.id
-  if(payload.original_message.text === "No one will love you if you can't remember simple stuff like that"){
+  if(payload.original_message.text === "Thanks! I will send out a reminder."){
     User.findOne({slackId: slackId})
     .then((user) => {
       makeCalendarReminder(user.googleCalenderAccount, slackId, subject, channel)
@@ -78,6 +81,7 @@ rtm.start();
 
 // Log all incoming messages
 rtm.on('message', (event) => {
+  //event.team => team_Id
   if (event.bot_id) return
   User.findOne({'slackId': event.user})
   .then((res) => {
@@ -86,7 +90,7 @@ rtm.on('message', (event) => {
         access_type: 'offline',
         state: event.user,
         scope: [
-          'https://www.googleapis.com/auth/calendar'
+          'https://www.googleapis.com/auth/calendar',
         ]
       })
       web.chat.postMessage({
@@ -130,13 +134,12 @@ rtm.on('message', (event) => {
             const result = responses[0].queryResult;
             const params = result.parameters.fields;
               let confirmation;
-              if (result.task !== "" && result.fulfillmentText === "No one will love you if you can't remember simple stuff like that") { //Intent indicates a reminder
+              if (result.task !== "" && result.fulfillmentText === "Thanks! I will send out a reminder.") { //Intent indicates a reminder
                 var reminder = new Task({
                   time: params.date.stringValue,
                   subject: params.Task.stringValue,
                   requesterId: event.user
                 })
-                subject = params.Task.stringValue;
                 reminder.save()
                 .then(()=>{
                   confirmation = {
@@ -168,11 +171,11 @@ rtm.on('message', (event) => {
                   }
                   web.chat.postMessage(confirmation).catch(err => console.log(err))
                 }).catch((err) => console.log(err))
-              } else if (result.meeting !== "" && result.fulfillmentText === "Aight fucker. Catch me outside") { //Intent indicates a meeting
+              } else if (result.meeting !== "" && result.fulfillmentText === "Thanks! The meeting is now set.") { //Intent indicates a meeting
                 var meeting = new Meeting({
-                  time: params.date.stringValue || params.time.stringValue,
+                  time: params.date || params.time,
                   invitees: params.name,
-                  subject: params.Task.stringValue,
+                  subject: params.Task,
                   requesterId: event.user
                 })
                 subject = params.Task.stringValue;
@@ -191,7 +194,7 @@ rtm.on('message', (event) => {
                                                 "name": "confirmation",
                                                 "text": "Yes",
                                                 "type": "button",
-                                                "value": JSON.stringify({user: event.user, subject: params.Task.stringValue, text: result.fulfillmentText})
+                                                "value": JSON.stringify({user: event.user, subject: params.Task, text: result.fulfillmentText})
                                             },
                                             {
                                                 "name": "confirmation",
